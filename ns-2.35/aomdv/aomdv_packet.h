@@ -15,7 +15,7 @@
 #define AOMDVTYPE_RREP   	0x04
 #define AOMDVTYPE_RERR   	0x08
 #define AOMDVTYPE_RREP_ACK  	0x10
-//增加推荐信任包类型宏定义
+//新增包
 #define AOMDVTYPE_RCOM     0x03
 #define AOMDVTYPE_PROB    0x05
 #define AOMDVTYPE_PTA    0x09
@@ -28,7 +28,7 @@
 #define HDR_AOMDV_REPLY(p)	((struct hdr_aomdv_reply*)hdr_aomdv::access(p))
 #define HDR_AOMDV_ERROR(p)	((struct hdr_aomdv_error*)hdr_aomdv::access(p))
 #define HDR_AOMDV_RREP_ACK(p)	((struct hdr_aomdv_rrep_ack*)hdr_aomdv::access(p))
-//增加推荐信任包头宏定义
+//新增包
 #define HDR_AOMDV_RCOM(p)	((struct hdr_aomdv_recommen*)hdr_aomdv::access(p))
 #define HDR_AOMDV_PROB(p)  ((struct hdr_aomdv_probe*)hdr_aomdv::access(p))
 #define HDR_AOMDV_PTA(p)  ((struct hdr_aomdv_pta*)hdr_aomdv::access(p))
@@ -170,6 +170,7 @@ struct hdr_aomdv_probe {
   }
 
 };
+//汇报不信任节点的PTA包
 struct hdr_aomdv_pta {
     u_int8_t        re_type;                // Type
 
