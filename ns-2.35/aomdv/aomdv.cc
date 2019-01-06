@@ -1,89 +1,10 @@
-/*
- * Copyright (c) 2008, Marcello Caleffi, <marcello.caleffi@unina.it>,
- * http://wpage.unina.it/marcello.caleffi
- *
- * The AOMDV code has been developed at DIET, Department of Electronic
- * and Telecommunication Engineering, University of Naples "Federico II"
- *
- *
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 59 Temple Place, Suite 330, Boston, MA 02111-1307, USA.
- *
- * The copyright of this module includes the following
- * linking-with-specific-other-licenses addition:
- *
- * In addition, as a special exception, the copyright holders of
- * this module give you permission to combine (via static or
-															  * dynamic linking) this module with free software programs or
- * libraries that are released under the GNU LGPL and with code
- * included in the standard release of ns-2 under the Apache 2.0
- * license or under otherwise-compatible licenses with advertising
- * requirements (or modified versions of such code, with unchanged
-					  * license).  You may copy and distribute such a system following the
- * terms of the GNU GPL for this module and the licenses of the
- * other code concerned, provided that you include the source code of
- * that other code when and as the GNU GPL requires distribution of
- * source code.
- *
- * Note that people who make modified versions of this module
- * are not obligated to grant this special exception for their
- * modified versions; it is their choice whether to do so.  The GNU
- * General Public License gives permission to release a modified
- * version without this exception; this exception also makes it
- * possible to release a modified version which carries forward this
- * exception.
- *
- */
-
-
-
-/*
- Copyright (c) 1997, 1998 Carnegie Mellon University.  All Rights
- Reserved. 
- 
- Redistribution and use in source and binary forms, with or without
- modification, are permitted provided that the following conditions are met:
- 
- 1. Redistributions of source code must retain the above copyright notice,
- this list of conditions and the following disclaimer.
- 2. Redistributions in binary form must reproduce the above copyright notice,
- this list of conditions and the following disclaimer in the documentation
- and/or other materials provided with the distribution.
- 3. The name of the author may not be used to endorse or promote products
- derived from this software without specific prior written permission.
- 
- THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
- OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
- ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- 
- The AODV code developed by the CMU/MONARCH group was optimized and tuned by Samir Das and Mahesh Marina, University of Cincinnati. The work was partially done in Sun Microsystems.
- 
- */
-
 
 
 //#include <ip.h>
 
 #include <aomdv/aomdv.h>
 #include <aomdv/aomdv_packet.h>
+#include <aomdv/aomdv_rtable.h>
 #include <random.h>
 #include <cmu-trace.h>
 #include <iostream>
@@ -93,7 +14,7 @@ using namespace std;
 
 #define max(a,b)        ( (a) > (b) ? (a) : (b) )
 #define CURRENT_TIME    Scheduler::instance().clock()
-#define TRUST_TIME 3	//刷新信任值的时间间隔，也当作计算信任值时的窗口大小
+
 
 // AOMDV
 #define DROP_RTR_RTEXPIRE               "REXP"
@@ -158,6 +79,7 @@ AOMDV::command(int argc, const char*const* argv) {
 
 #endif // LINK LAYER DETECTION
 			t_timer.sched((double)TRUST_TIME); //将信任值计算计时器加入到command函数，使其生效
+			prob_timer.handle((Event*) 0);
 			rtimer.handle((Event*) 0);
 			return TCL_OK;
 		}
@@ -212,6 +134,7 @@ void
 AOMDV::tap(const Packet *p)		//混杂监听
 {
 	hdr_cmn* ch= HDR_CMN(p);
+	hdr_ip *ih = HDR_IP(p);
 	if(ch->ptype() == PT_CBR){
 		AOMDV_Neighbor* nb =nb_lookup(ch->prev_hop_);
 		if(nb&&index==ch->pprev_hop_){  //自己就是该包的上上跳，说明该包被成功转发了
@@ -220,7 +143,7 @@ AOMDV::tap(const Packet *p)		//混杂监听
 		}
 
 	}
-	else if(ch->ptype() == PT_AOMDV){
+	else if(ch->ptype() == PT_AOMDV && ih->daddr()!=IP_BROADCAST){
 		AOMDV_Neighbor* nb =nb_lookup(ch->prev_hop_);
 		if(nb&&index==ch->pprev_hop_){  //自己就是该包的上上跳，说明该包被成功转发了
 			nb->add_control_forward_corrects();
@@ -235,7 +158,7 @@ Constructor
 
 AOMDV::AOMDV(nsaddr_t id) : Agent(PT_AOMDV),
 btimer(this), htimer(this), ntimer(this), 
-rtimer(this), lrtimer(this),t_timer(this),rqueue() {
+rtimer(this), lrtimer(this),t_timer(this),prob_timer(this),rqueue() {
 	
 	// AOMDV code
 	aomdv_max_paths_ = 3;
@@ -322,8 +245,16 @@ AOMDVLocalRepairTimer::handle(Event* p)  {  // SRD: 5/4/99
 }
 
 /************************************/
+void AOMDVProbeTimer::handle(Event*)
+{
+	//if((double)CURRENT_TIME >PROB_T)
+	agent->sendProb();
+	double interval = PROB_T;
+	Scheduler::instance().schedule(this, &intr, interval);
+}
 void
-TrustTimer::expire(Event*){
+TrustTimer::expire(Event*)
+{
 	agent->set_trust();
 	agent->t_timer.resched((double)TRUST_TIME);
 }
@@ -608,6 +539,7 @@ AOMDV::rt_down(aomdv_rt_entry *rt) {
 
 void
 AOMDV::rt_resolve(Packet *p) {
+
 	struct hdr_cmn *ch = HDR_CMN(p);
 	struct hdr_ip *ih = HDR_IP(p);
 	aomdv_rt_entry *rt;
@@ -618,6 +550,7 @@ AOMDV::rt_resolve(Packet *p) {
 	 */
 	ch->xmit_failure_ = aomdv_rt_failed_callback;
 	ch->xmit_failure_data_ = (void*) this;
+
    rt = rtable.rt_lookup(ih->daddr());
 	if(rt == 0) {
 		rt = rtable.rt_add(ih->daddr());
@@ -824,6 +757,12 @@ AOMDV::recvAOMDV(Packet *p) {
 		case AOMDVTYPE_RCOM:
 			recvRcom(p);
 			break;
+		case AOMDVTYPE_PROB:
+			recvProb(p);
+			break;
+		case AOMDVTYPE_PTA:
+			recvPta(p);
+			break;
 		default:
 
 			fprintf(stderr, "Invalid AOMDV type (%x)\n", ah->ah_type);
@@ -848,7 +787,7 @@ AOMDV::recvRequest(Packet *p) {
 	 *      - I'm the source
 	 *      - I recently heard this request.
 	 */
-	//std::cout<<index<<":收到请求";
+
 	if(rq->rq_src == index) {
 #ifdef DEBUG
 		fprintf(stderr, "%s: got my own REQUEST\n", __FUNCTION__);
@@ -857,8 +796,21 @@ AOMDV::recvRequest(Packet *p) {
 		//cout<<"，但这是我自己发的\n";
 		return;
 	} 
-	
 
+	//judge trust
+	AOMDV_Neighbor *nbt;
+	nbt=nb_lookup(ih->saddr());
+	if(!nbt)
+	{
+		nb_insert(ih->saddr());
+		nbt=nb_lookup(ih->saddr());
+	}
+	rq->RPT = min(rq->RPT,nbt->get_TV());
+	if(rq->RPT < rq->RT)
+	{
+		Packet::free(p);
+		return;
+	}
    /* If RREQ has already been received - drop it, else remember "RREQ id" <src IP, bcast ID>. */
    if ( (b = id_get(rq->rq_src, rq->rq_bcast_id)) == NULL)  {
 		// Cache the broadcast ID
@@ -870,7 +822,7 @@ AOMDV::recvRequest(Packet *p) {
 	   kill_request_propagation = true;
 	   //std::cout<<"，但这是重复请求";
 		}
-	cout<<endl;
+
    /* If I am a neighbor to the RREQ source, make myself first hop on path from source to dest. */
    if (rq->rq_hop_count == 0) 
 		rq->rq_first_hop = index;
@@ -899,7 +851,7 @@ AOMDV::recvRequest(Packet *p) {
 		rt0->rt_flags = RTF_UP;
 		/* Insert new path for route entry to source of RREQ. 
 			(src addr, hop count + 1, lifetime, last hop (first hop for RREQ)) */
-		reverse_path = rt0->path_insert(ih->saddr(), rq->rq_hop_count+1, CURRENT_TIME + REV_ROUTE_LIFE, rq->rq_first_hop);
+		reverse_path = rt0->path_insert(ih->saddr(), rq->rq_hop_count+1, CURRENT_TIME + REV_ROUTE_LIFE, rq->rq_first_hop,rq->FPT,rq->RPT);
 		// CHANGE
 		rt0->rt_last_hop_count = rt0->path_get_max_hopcount();
 		// CHANGE
@@ -933,7 +885,7 @@ AOMDV::recvRequest(Packet *p) {
 				  (((rq->rq_hop_count + 1) - rt0->path_get_min_hopcount()) <= aomdv_prim_alt_path_len_diff_)
 				  ) {
 				/* Insert new (disjoint) reverse path */
-				reverse_path = rt0->path_insert(ih->saddr(), rq->rq_hop_count+1, CURRENT_TIME + REV_ROUTE_LIFE, rq->rq_first_hop);
+				reverse_path = rt0->path_insert(ih->saddr(), rq->rq_hop_count+1, CURRENT_TIME + REV_ROUTE_LIFE, rq->rq_first_hop,rq->FPT,rq->RPT);
 				// CHANGE
 				rt0->rt_last_hop_count = rt0->path_get_max_hopcount();
 				// CHANGE
@@ -995,7 +947,13 @@ AOMDV::recvRequest(Packet *p) {
 		/* Make sure seq number is even (why?) */
 		if (seqno%2) 
 			seqno++;
-		
+		AOMDV_Neighbor *nbt;
+		nbt=nb_lookup(ih->saddr());
+		if(!nbt)
+		{
+			nb_insert(ih->saddr());
+			nbt=nb_lookup(ih->saddr());
+		}
 		
 		sendReply(rq->rq_src,              // IP Destination
 					 0,                       // Hop Count
@@ -1005,7 +963,9 @@ AOMDV::recvRequest(Packet *p) {
 					 rq->rq_timestamp,        // timestamp
 					 ih->saddr(),             // nexthop
 					 rq->rq_bcast_id,         // broadcast id to identify this route discovery
-					 ih->saddr());         
+					 ih->saddr(),
+					 1,
+					 nbt->get_TV());
 		
 		Packet::free(p);
 	}
@@ -1037,7 +997,9 @@ AOMDV::recvRequest(Packet *p) {
 							 rq->rq_timestamp,
 							 ih->saddr(), 
 							 rq->rq_bcast_id,
-							 forward_path->lasthop);
+							 forward_path->lasthop,
+							 forward_path->FPT,
+							 forward_path->RPT);
 			}
 	#endif // AOMDV_NODE_DISJOINT_PATHS
 	#ifdef AOMDV_LINK_DISJOINT_PATHS
@@ -1076,7 +1038,9 @@ AOMDV::recvRequest(Packet *p) {
 							 rq->rq_timestamp,
 							 ih->saddr(), 
 							 rq->rq_bcast_id,
-							 forward_path->lasthop);
+							 forward_path->lasthop,
+							 forward_path->FPT,
+							 forward_path->RPT);
 			}
 	#endif // AOMDV_LINK_DISJOINT_PATHS
 		}
@@ -1129,6 +1093,21 @@ AOMDV::recvReply(Packet *p) {
 	
    /* If I receive a RREP with myself as source - drop packet (should not occur).
 Comment: rp_dst is the source of the RREP, or rather the destination of the RREQ. */
+	//judge trust
+	AOMDV_Neighbor *nbt;
+	nbt=nb_lookup(ch->prev_hop_);
+	if(!nbt)
+	{
+		nb_insert(ch->prev_hop_);
+		nbt=nb_lookup(ch->prev_hop_);
+	}
+	rp->FPT = min(rp->FPT,nbt->get_TV());
+	if(rp->FPT < rp->RT || nbt->black_list == 1)
+	{
+		Packet::free(p);
+		return;
+	}
+
    if (rp->rp_dst == index) {
       Packet::free(p);
       return;
@@ -1160,7 +1139,7 @@ Comment: rp_dst is the source of the RREP, or rather the destination of the RREQ
 		rt->path_delete();
 		rt->rt_flags = RTF_UP;
 		/* Insert forward path to RREQ destination. */
-		forward_path = rt->path_insert(rp->rp_src, rp->rp_hop_count+1, CURRENT_TIME + rp->rp_lifetime, rp->rp_first_hop);
+		forward_path = rt->path_insert(rp->rp_src, rp->rp_hop_count+1, CURRENT_TIME + rp->rp_lifetime, rp->rp_first_hop,rp->FPT,rp->RPT);
 		// CHANGE
 		rt->rt_last_hop_count = rt->path_get_max_hopcount();
 		// CHANGE
@@ -1174,6 +1153,7 @@ Comment: rp_dst is the source of the RREP, or rather the destination of the RREQ
 		/* If the path already exists - increase path lifetime */
 		if ((forward_path = rt->disjoint_path_lookup(rp->rp_src, rp->rp_first_hop))) {
 			assert (forward_path->hopcount == (rp->rp_hop_count+1));
+			forward_path->FPT = min(forward_path->FPT,nbt->get_TV());
 			forward_path->expire = max(forward_path->expire, CURRENT_TIME + rp->rp_lifetime); 
 		}
 		/* If the path does not already exist, there is room for it and it 
@@ -1183,7 +1163,7 @@ Comment: rp_dst is the source of the RREP, or rather the destination of the RREQ
 					 ((rp->rp_hop_count+1) - rt->path_get_min_hopcount() <= aomdv_prim_alt_path_len_diff_)
 					 ) {
 			/* Insert forward path to RREQ destination. */
-			forward_path = rt->path_insert(rp->rp_src, rp->rp_hop_count+1, CURRENT_TIME + rp->rp_lifetime, rp->rp_first_hop);
+			forward_path = rt->path_insert(rp->rp_src, rp->rp_hop_count+1, CURRENT_TIME + rp->rp_lifetime, rp->rp_first_hop,rp->FPT,rp->RPT);
 			// CHANGE
 			rt->rt_last_hop_count = rt->path_get_max_hopcount();
 			// CHANGE
@@ -1258,6 +1238,15 @@ Comment: rp_dst is the source of the RREP, or rather the destination of the RREQ
    ch->xmit_failure_ = aomdv_rt_failed_callback;
    ch->xmit_failure_data_ = (void*) this;
    
+   //refresh rpt
+	nbt=nb_lookup(ch->next_hop_ );
+	if(!nbt)
+	{
+		nb_insert(ch->next_hop_ );
+		nbt=nb_lookup(ch->next_hop_ );
+	}
+   rp->RPT = min(rp->RPT,nbt->get_TV());
+
    // route advertisement
    rp->rp_src = index;
    if (rt->rt_advertised_hops == INFINITY)
@@ -1330,9 +1319,7 @@ Comment: rp_dst is the source of the RREP, or rather the destination of the RREQ
 // AOMDV code
 void
 AOMDV::recvError(Packet *p) {
-#ifdef DEBUG
-	fprintf(stderr, "%s: node=%d\n", __FUNCTION__, index);
-#endif // DEBUG
+
 	struct hdr_ip *ih = HDR_IP(p);
 	struct hdr_aomdv_error *re = HDR_AOMDV_ERROR(p);
 	aomdv_rt_entry *rt;
@@ -1340,31 +1327,18 @@ AOMDV::recvError(Packet *p) {
 	Packet *rerr = Packet::alloc();
 	struct hdr_aomdv_error *nre = HDR_AOMDV_ERROR(rerr);
 	
-#ifdef DEBUG
-	fprintf(stderr, "%s: multipath version\n", __FUNCTION__);
-#endif // DEBUG
-	
 	nre->DestCount = 0;
 	
 	for (i=0; i<re->DestCount; i++) {
 		// For each unreachable destination
 		AOMDV_Path* path;
 		rt = rtable.rt_lookup(re->unreachable_dst[i]);
-		/* If route entry exists, route is up, a path to the unreachable 
-			destination exists through the neigbor from which RERR was 
-			received, and my sequence number is not more recent - delete 
-			path and add it to the RERR message I will send. */   
+
 		if ( rt && (rt->rt_flags == RTF_UP) &&
 			  (path = rt->path_lookup(ih->saddr())) &&
 			  (rt->rt_seqno <= re->unreachable_dst_seqno[i]) ) {
 			assert((rt->rt_seqno%2) == 0); // is the seqno even?
-#ifdef DEBUG
-			fprintf(stderr, "%s(%f): %d\t(%d\t%u\t%d)\t(%d\t%u\t%d)\n",
-					  __FUNCTION__,CURRENT_TIME,
-					  index, rt->rt_dst, rt->rt_seqno, ih->src_.addr_,
-					  re->unreachable_dst[i],re->unreachable_dst_seqno[i],
-					  ih->src_.addr_);
-#endif // DEBUG
+
 			
 			rt->path_delete(ih->saddr());
 			rt->rt_highest_seqno_heard = max(rt->rt_highest_seqno_heard, re->unreachable_dst_seqno[i]);
@@ -1384,9 +1358,7 @@ AOMDV::recvError(Packet *p) {
 	} 
 	
 	if (nre->DestCount > 0) {
-#ifdef DEBUG
-		fprintf(stderr, "%s(%f): %d\t sending RERR...\n", __FUNCTION__, CURRENT_TIME, index);
-#endif // DEBUG
+
 		sendError(rerr);
 	}
 	else {
@@ -1426,9 +1398,16 @@ AOMDV::forward(aomdv_rt_entry *rt, Packet *p, double delay) {
 	}
 
 	if (rt) {
-		 if(ch->ptype()==PT_CBR){
-				 cout<<index<<endl;
-			 }
+		if(ch->ptype() == PT_CBR)
+		{	//set malicious node
+			/*
+			if(index==3)
+			{
+				Packet::free(p);
+				return;
+			}
+			*/
+		}
 		assert(rt->rt_flags == RTF_UP);
 		// AOMDV code
 
@@ -1437,16 +1416,63 @@ AOMDV::forward(aomdv_rt_entry *rt, Packet *p, double delay) {
 		ch->next_hop() = path->nexthop;
 
 		/**********以下为修改内容***************/
+		AOMDV_Precursor *pc=rt->pc_lookup(ch->prev_hop_);
+		if(!pc)
+		{
+			rt->pc_insert(ch->prev_hop_);
+			pc=rt->pc_lookup(ch->prev_hop_);
+		}
 
 		ch->pprev_hop_=ch->prev_hop_;		//添加代码用于更新包里的上上跳和上跳
 		ch->prev_hop_=this->index;
+		//refresh path trust and judge
+		AOMDV_Neighbor* nb =nb_lookup(ch->next_hop_);
 
-		if(ch->ptype() == PT_CBR){
-				AOMDV_Neighbor* nb =nb_lookup(ch->next_hop_);
-				if(!nb){		//如果下一跳不是邻居，则将它添加到邻居表中
-					nb_insert(ch->next_hop_);
-					nb=nb_lookup(ch->next_hop_);
+		if(!nb){		//如果下一跳不是邻居，则将它添加到邻居表中
+			nb_insert(ch->next_hop_);
+			nb=nb_lookup(ch->next_hop_);
+		}
+
+		if(ch->ptype() == PT_CBR)
+		{
+			path->FPT = min(path->FPT,nb->get_TV());
+
+			if(path->FPT < AOMDV_Neighbor::TrustThreshold)
+			{
+
+				cout<<index<<":not trust "<<ch->next_hop_<<endl;
+
+				pc = rt->rt_pclist.lh_first;
+				for(;pc;pc = pc->pc_link.le_next)
+				{		//cout<<index<<":"<<ch->next_hop_<<" to "<<pc->pc_addr<<endl;
+					Packet *rerr = Packet::alloc();
+					struct hdr_ip *ih_r = HDR_IP(rerr);
+					struct hdr_aomdv_pta *nre = HDR_AOMDV_PTA(rerr);
+
+					nre->unreachable_dst = rt->rt_dst;
+					nre->unreachable_dst_seqno = rt->rt_seqno;
+					nre->unreachable_lasthop = path->lasthop;
+					ih_r->daddr()=pc->pc_addr;
+					sendPta(rerr);
 				}
+				rt->path_delete(path->nexthop);
+				if (rt->path_empty()) {
+						rt_down(rt);
+					}
+				nb->black_list=1;
+
+
+				drop(p, DROP_RTR_NO_ROUTE);
+
+				return;
+			}
+
+		}
+
+		//forward sends
+		if(ch->ptype() == PT_CBR){
+
+
 					nb->add_data_forward_alls();    //转发次数++
 					//cout<<index<<"->"<<nb->nb_addr<<":add_data\n";
 				if(ch->next_hop_==ih->daddr()){	  //目的节点收到包后不会再转发，就不会被tap监测到，所以在这里让它的 正确转发次数++
@@ -1457,11 +1483,7 @@ AOMDV::forward(aomdv_rt_entry *rt, Packet *p, double delay) {
 			}
 		else if(ch->ptype() == PT_AOMDV){
 
-			AOMDV_Neighbor* nb =nb_lookup(ch->next_hop_);
-			if(!nb){		//如果下一跳不是邻居，则将它添加到邻居表中
-				nb_insert(ch->next_hop_);
-				nb=nb_lookup(ch->next_hop_);
-			}
+
 				nb->add_control_forward_alls();    //转发次数++
 				//cout<<index<<"->"<<nb->nb_addr<<":add_PT_AOMDV\n";
 
@@ -1510,7 +1532,7 @@ AOMDV::forward(aomdv_rt_entry *rt, Packet *p, double delay) {
 			Scheduler::instance().schedule(target_, p, 0.);
 		}
 	}
-	
+
 }
 
 
@@ -1628,6 +1650,11 @@ AOMDV::sendRequest(nsaddr_t dst) {
 	rq->rq_dst = dst;
 	rq->rq_dst_seqno = (rt ? rt->rt_seqno : 0);
 	rq->rq_src = index;
+	//set path trust
+	rq->RT = AOMDV_Neighbor::TrustThreshold;
+	rq->FPT = 1;
+	rq->RPT = 1;
+
 	seqno += 2;
 	assert ((seqno%2) == 0);
 	rq->rq_src_seqno = seqno;
@@ -1641,7 +1668,7 @@ AOMDV::sendRequest(nsaddr_t dst) {
 void
 AOMDV::sendReply(nsaddr_t ipdst, u_int32_t hop_count, nsaddr_t rpdst,
 					  u_int32_t rpseq, double lifetime, double timestamp, 
-					  nsaddr_t nexthop, u_int32_t bcast_id, nsaddr_t rp_first_hop) {
+					  nsaddr_t nexthop, u_int32_t bcast_id, nsaddr_t rp_first_hop,double fpt,double rpt) {
 	Packet *p = Packet::alloc();
 	struct hdr_cmn *ch = HDR_CMN(p);
 	struct hdr_ip *ih = HDR_IP(p);
@@ -1680,6 +1707,11 @@ AOMDV::sendReply(nsaddr_t ipdst, u_int32_t hop_count, nsaddr_t rpdst,
 	ih->sport() = RT_PORT;
 	ih->dport() = RT_PORT;
 	ih->ttl_ = NETWORK_DIAMETER;
+
+	//set path trust
+	rp->RT = AOMDV_Neighbor::TrustThreshold;
+	rp->FPT = fpt;
+	rp->RPT = rpt;
 	//std::cout<<index<<":发送答复\n";
 	Scheduler::instance().schedule(target_, p, 0.);
 	
@@ -1687,16 +1719,12 @@ AOMDV::sendReply(nsaddr_t ipdst, u_int32_t hop_count, nsaddr_t rpdst,
 
 void
 AOMDV::sendError(Packet *p, bool jitter) {
-#ifdef ERROR
-	fprintf(stderr, "%s: node=%d\n", __FUNCTION__, index);
-#endif // DEBUG
+
 	struct hdr_cmn *ch = HDR_CMN(p);
 	struct hdr_ip *ih = HDR_IP(p);
 	struct hdr_aomdv_error *re = HDR_AOMDV_ERROR(p);
 	
-#ifdef ERROR
-	fprintf(stderr, "sending Error from %d at %.2f\n", index, Scheduler::instance().clock());
-#endif // DEBUG
+
 	
 	re->re_type = AOMDVTYPE_RERR;
 	//re->reserved[0] = 0x00; re->reserved[1] = 0x00;
@@ -1768,6 +1796,36 @@ AOMDV::sendHello() {
 	Scheduler::instance().schedule(target_, p, 0.0);
 
 }
+void
+AOMDV::recvHello(Packet *p) {
+	// AOMDV code
+	struct hdr_ip *ih = HDR_IP(p);
+	struct hdr_aomdv_reply *rp = HDR_AOMDV_REPLY(p);
+	AOMDV_Neighbor *nb;
+
+	nb = nb_lookup(rp->rp_dst);
+	if(nb == 0) {
+		nb_insert(rp->rp_dst);
+	}
+	else {
+		nb->nb_expire = CURRENT_TIME +
+		(1.5 * ALLOWED_HELLO_LOSS * HELLO_INTERVAL);
+	}
+
+	// AOMDV code
+	// Add a route to this neighbor
+	ih->daddr() = index;
+	rp->rp_src = ih->saddr();
+	rp->rp_first_hop = index;
+	//std::cout<<index<<":hello **from"<<rp->rp_dst<<" time : "<<CURRENT_TIME<<endl;
+	rp->FPT = 1;
+	rp->RPT = 1;
+	rp->RT = AOMDV_Neighbor::TrustThreshold;
+	recvReply(p);
+
+	//Packet::free(p);  // CHANGED BY ME (commented this line)
+}
+
 /*****************以下为修改内容**********************/
 void
 AOMDV::sendRcom(Packet *p) {
@@ -1781,12 +1839,7 @@ AOMDV::sendRcom(Packet *p) {
 #endif // DEBUG
 
 	rc->rc_type = AOMDVTYPE_RCOM;
-	//rh->rp_flags = 0x00;
-	// AOMDV code
-	rc->rc_hop_count = 0;
-	rc->rc_dst = index;
-	rc->rc_dst_seqno = seqno;
-	rc->rc_lifetime = (1 + ALLOWED_HELLO_LOSS) * HELLO_INTERVAL;
+
 
 
 	// ch->uid() = 0;
@@ -1808,21 +1861,25 @@ AOMDV::sendRcom(Packet *p) {
 
 }
 void
-AOMDV::recvRcom(Packet *p){
+AOMDV::recvRcom(Packet *p)
+{
 		struct hdr_ip *ih = HDR_IP(p);
 		struct hdr_aomdv_recommen *rc = HDR_AOMDV_RCOM(p);
 		AOMDV_Neighbor *nb;
-		cout<<index<<" recv "<<ih->saddr()<<endl;
+
 		nb = nb_lookup(ih->saddr());
 		if(nb && nb->get_TV() >= AOMDV_Neighbor::TrustThreshold){
-		/*�ж��Ƿ�nb���ڣ��Լ��ж�nb������ֵ�Ƿ������ֵ*/
+
+			nb->interact_nbs+=rc->nb_num;
 			
 			for(int i = 0; i<rc->nb_num;i++){
 				AOMDV_Neighbor *nb_temp = nb_lookup(rc->nb_No[i]);
 				if(nb_temp){
-					/*���·��ӡ���ĸ*/ 
+
 					nb_temp->fenzi += nb->direct_trust * rc->nb_dt[i];
 					nb_temp->fenmu += nb->direct_trust;
+					if(rc->nb_dt[i] >= AOMDV_Neighbor::TrustThreshold)
+						nb_temp->trusted_nbs++;
 
 				}
 
@@ -1831,33 +1888,133 @@ AOMDV::recvRcom(Packet *p){
 
 		Packet::free(p);
 }
-/*****************以上为修改内容**************************/
 void
-AOMDV::recvHello(Packet *p) {
-	// AOMDV code
+AOMDV::sendProb()
+{
+	Packet *p = Packet::alloc();
+	struct hdr_cmn *ch = HDR_CMN(p);
 	struct hdr_ip *ih = HDR_IP(p);
-	struct hdr_aomdv_reply *rp = HDR_AOMDV_REPLY(p);
+	struct hdr_aomdv_probe *rh = HDR_AOMDV_PROB(p);
+
+	rh->rp_type = AOMDVTYPE_PROB;
+
+
+	// ch->uid() = 0;
+	ch->ptype() = PT_AOMDV;
+	ch->size() = IP_HDR_LEN + rh->size();
+	ch->iface() = -2;
+	ch->error() = 0;
+	ch->addr_type() = NS_AF_NONE;
+	ch->prev_hop_ = index;          // AODV hack
+
+	ih->saddr() = index;
+	ih->daddr() = IP_BROADCAST;
+	ih->sport() = RT_PORT;
+	ih->dport() = RT_PORT;
+	ih->ttl_ = 1;
+	//std::cout<<index<<":sendhello **"<<"time : "<<CURRENT_TIME<<endl;
+
+	Scheduler::instance().schedule(target_, p,  0.1*Random::uniform());
+}
+void
+AOMDV::recvProb(Packet *p)
+{
+	struct hdr_ip *ih = HDR_IP(p);
+
 	AOMDV_Neighbor *nb;
 	
-	nb = nb_lookup(rp->rp_dst);
+	nb = nb_lookup(ih->saddr());
 	if(nb == 0) {
-		nb_insert(rp->rp_dst);
+		nb_insert(ih->saddr());
+		nb = nb_lookup(ih->saddr());
 	}
-	else {
-		nb->nb_expire = CURRENT_TIME +
-		(1.5 * ALLOWED_HELLO_LOSS * HELLO_INTERVAL);
-	}
-
-	// AOMDV code
-	// Add a route to this neighbor
-	ih->daddr() = index;
-	rp->rp_src = ih->saddr();
-	rp->rp_first_hop = index;
-	std::cout<<index<<":hello **from"<<rp->rp_dst<<" time : "<<CURRENT_TIME<<endl;
-	recvReply(p);
-
-	//Packet::free(p);  // CHANGED BY ME (commented this line)
+	nb->prob_recvs++;
+	Packet::free(p);
 }
+void
+AOMDV::sendPta(Packet *p)
+{
+		struct hdr_cmn *ch = HDR_CMN(p);
+		struct hdr_ip *ih = HDR_IP(p);
+		struct hdr_aomdv_pta *re = HDR_AOMDV_PTA(p);
+
+
+
+		re->re_type = AOMDVTYPE_PTA;
+
+
+		ch->ptype() = PT_AOMDV;
+		ch->size() = IP_HDR_LEN + re->size();
+		ch->iface() = -2;
+		ch->error() = 0;
+		ch->addr_type() = NS_AF_NONE;
+		ch->next_hop_ = 0;
+		ch->prev_hop_ = index;          // AODV hack
+		ch->direction() = hdr_cmn::DOWN;       //important: change the packet's direction
+
+		ih->saddr() = index;
+
+		ih->sport() = RT_PORT;
+		ih->dport() = RT_PORT;
+		ih->ttl_ = 1;
+		//cout<<index<<"**"<<ih->daddr()<<endl;
+		Scheduler::instance().schedule(target_, p, 0.0);
+		//cout<<index<<"**"<<ih->daddr()<<endl;
+
+}
+void
+AOMDV::recvPta(Packet *p)
+{
+		struct hdr_ip *ih = HDR_IP(p);
+		struct hdr_aomdv_pta *re = HDR_AOMDV_PTA(p);
+		aomdv_rt_entry *rt;
+
+		AOMDV_Precursor * pc;
+
+
+		//cout<<index<<": recv pta\n"<<endl;
+			AOMDV_Path* path;
+			rt = rtable.rt_lookup(re->unreachable_dst);
+
+			if ( rt && (rt->rt_flags == RTF_UP) &&
+				  (path = rt->path_lookup(ih->saddr())) &&
+				  (rt->rt_seqno <= re->unreachable_dst_seqno) &&
+				  path->lasthop == re->unreachable_lasthop) {
+				assert((rt->rt_seqno%2) == 0); // is the seqno even?
+
+
+				rt->path_delete(ih->saddr());
+				rt->rt_highest_seqno_heard = max(rt->rt_highest_seqno_heard, re->unreachable_dst_seqno);
+				if (rt->path_empty()) {
+					rt_down(rt);
+					}
+				rt->rt_seqno = rt->rt_highest_seqno_heard;
+
+
+				pc = rt->rt_pclist.lh_first;
+				for(;pc;pc = pc->pc_link.le_next)
+				{
+					if(index == pc->pc_addr) continue;
+					Packet *rerr = Packet::alloc();
+					struct hdr_ip *ih_r = HDR_IP(rerr);
+					struct hdr_aomdv_pta *nre = HDR_AOMDV_PTA(rerr);
+					nre->unreachable_dst = rt->rt_dst;
+					nre->unreachable_dst_seqno = rt->rt_seqno;
+					nre->unreachable_lasthop = path->lasthop;
+
+
+						ih_r->daddr()=pc->pc_addr;
+						sendPta(rerr);
+				}
+
+			}
+
+
+
+
+		Packet::free(p);
+}
+/*****************以上为修改内容**************************/
 
 // AOMDV code
 void
@@ -1970,40 +2127,50 @@ AOMDV::set_trust()
 	AOMDV_Neighbor *nb;
 	Packet *p = Packet::alloc();
 	struct hdr_aomdv_recommen *rc = HDR_AOMDV_RCOM(p);
-	/**���µ�����Ϣ**/ 
+/*
 	cout<<endl;
 	cout<<index<<":���α� time:"<<CURRENT_TIME<<endl;
 	cout<<"**************************"<<endl;
-	/**���ϵ�����Ϣ**/ 
-	
+*/
+	aomdv_rt_entry *rt=rtable.head();
+/*	for(;rt;rt=rt->rt_link.le_next)
+	{
+		AOMDV_Path *path = rt->rt_path_list.lh_first;
+		cout<<"rt.src :"<<rt->rt_dst<<endl;
+
+		for(;path;path=path->path_link.le_next)
+		{
+			cout<<"nexthop:"<<path->nexthop<<" laethop:"<<path->lasthop<<" fpt:"<<path->FPT<<" rpt:"<<path->RPT<<endl;
+			cout<<"expire: "<<path->expire<<endl;
+		}
+		cout<<endl;
+	}
+	*/
 	int num=0;
 
 	for(nb = nbhead.lh_first;nb;nb = nb->nb_link.le_next) //�����ھӱ� 
 	{
 		nb->set_TV();
 		
-		/**���µ�����Ϣ**/ 
-		cout<<nb->nb_addr<<"���ھӣ� "<<endl;
+/*
+		cout<<nb->nb_addr<<"号邻居："<<endl;
 		cout<<"TV                  ��"<<nb->get_TV()<<endl;
 		cout<<"data_forward_rate   :"<<nb->data_forward_rate<<endl;
 		cout<<"control_forward_rate:"<<nb->control_forward_rate<<endl;
 		cout<<"recommen_trust      :"<<nb->recommen_trust<<endl;
+		cout<<"delivery_ratio   :"<<nb->delivery_ratio<<endl;
+		cout<<"activity_degree  :"<<nb->activity_degree<<endl;
 		cout<<endl;
-		/**���ϵ�����Ϣ**/ 
+*/
 
 
-		nb->control_forward_corrects = 0;	//���� 
-		nb->control_forward_alls = 0;
-		nb->data_forward_corrects = 0;
-		nb->data_forward_alls = 0;
-		nb->fenzi = 0;
-		nb->fenmu = 0;
+		nb->TV_init();
 
-		/**�� nb->nb_addr�� nb->direct_trust�����ֶ�������ӵ��Ƽ����ΰ����½�������*/
+
 		rc->nb_No[num] = nb->nb_addr;
 		rc->nb_dt[num] = nb->direct_trust;
 		num++;
-		if(num == MAX_NB){	//ÿ�� MAX_NB�����ͽ��ð��㲥��ȥ 
+		if(num == MAX_NB){
 			num = 0;
 			rc->nb_num = MAX_NB;
 			sendRcom(p);
@@ -2013,12 +2180,12 @@ AOMDV::set_trust()
 
 	}
 
-	if(num != 0)  {		//���� MAX_NB����Ҳ���ð��㲥��ȥ 
+	if(num != 0)  {
 		rc->nb_num = num;
 		sendRcom(p);
 	}
 
-	cout<<"**************************"<<endl;
+	//cout<<"**************************"<<endl;
 }
 /*********************************/
 
