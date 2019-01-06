@@ -216,6 +216,15 @@ private:
    Event intr;
 };
 /**************************************/
+class AOMDVProbeTimer : public Handler {
+public:
+		AOMDVProbeTimer(AOMDV* a) : agent(a) {}
+        void   handle(Event*);
+private:
+        AOMDV    *agent;
+   Event intr;
+};
+
 class TrustTimer:public TimerHandler{
 public:
 	TrustTimer(AOMDV*a):TimerHandler(){
@@ -348,6 +357,7 @@ class AOMDV: public Tap,public Agent {
   /*
    * make some friends first 
    */
+		friend class AOMDVProbeTimer;
 		friend class TrustTimer; //计算信任的定时器
         friend class aomdv_rt_entry;
         friend class AOMDVBroadcastTimer;
@@ -421,10 +431,11 @@ class AOMDV: public Tap,public Agent {
         void            sendReply(nsaddr_t ipdst, u_int32_t hop_count,
                                   nsaddr_t rpdst, u_int32_t rpseq,
                                   double lifetime, double timestamp,
-              nsaddr_t nexthop, u_int32_t bcast_id, nsaddr_t rp_first_hop);
+              nsaddr_t nexthop, u_int32_t bcast_id, nsaddr_t rp_first_hop,double fpt,double rpt);
         void            sendError(Packet *p, bool jitter = true);
         void			sendRcom(Packet *p);
-                                          
+        void			sendProb();
+        void			sendPta(Packet*p);
         /*
          * Packet RX Routines
          */
@@ -433,7 +444,10 @@ class AOMDV: public Tap,public Agent {
         void            recvRequest(Packet *p);
         void            recvReply(Packet *p);
         void            recvError(Packet *p);
+        /***/
         void			recvRcom(Packet *p);
+        void 			recvProb(Packet *p);
+        void			recvPta(Packet *p);
 
    /*
     * History management
@@ -459,6 +473,7 @@ class AOMDV: public Tap,public Agent {
         AOMDVRouteCacheTimer rtimer;
         AOMDVLocalRepairTimer lrtimer;
         TrustTimer t_timer;
+        AOMDVProbeTimer prob_timer;
         /*
          * Routing Table
          */
