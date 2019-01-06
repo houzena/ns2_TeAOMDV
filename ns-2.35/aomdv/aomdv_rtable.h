@@ -11,7 +11,8 @@
 
 #define CURRENT_TIME    Scheduler::instance().clock()
 #define INFINITY2        0xff
-
+#define TRUST_TIME 3	//刷新信任值的时间间隔，也当作计算信任值时的窗口大小
+#define PROB_T 0.2		//发送探测包的时间间隔
 /*
    AOMDV Neighbor Cache Entry
 */
@@ -23,8 +24,8 @@ class AOMDV_Neighbor {
         /**********以下为修改内容**************/
         void set_TV();
         double get_TV();
-
-        /**ŒÆËãÖ±œÓÐÅÈÎ**/
+        void TV_init();
+        /**1、计算直接信任**/
         void set_direct_trust();
 
         void add_control_forward_corrects(){control_forward_corrects++;}
@@ -34,17 +35,14 @@ class AOMDV_Neighbor {
         void add_data_forward_alls(){data_forward_alls++;}
 
 
-        /**ŒÆËãÍÆŒöÐÅÈÎ**/
+        /**2、计算推荐信任**/
         void set_recommen_trust();
 
-        /**ŒÆËã×ª·¢œ»»õÂÊ**/
-        void set_fdr();
+        /**3、计算交货率**/
+        void set_delivery_ratio();
 
-        /**ŒÆËã»î¶¯¶È**/
-        void set_ad();
-        void add_cn_rt(){ cn_rt++; }
-        void add_cn_ar(){ cn_ar++; }
-
+        /**4、计算活动度**/
+        void set_activity_degree();
         /**********以上为修改内容**************/
 
 protected:
@@ -54,8 +52,8 @@ protected:
     /**********以下为修改内容**************/
         static double  TrustThreshold;  //信任阈值
         bool black_list;    //信任黑名单标志
-        double TV;
-        /*计算直接信任**/
+        double TV; //对该邻居的综合信任度
+        /*1、计算直接信任**/
 
         double direct_trust;      //直接信任
 
@@ -68,24 +66,26 @@ protected:
         int data_forward_alls;   //累积总转发控制包数
 
 
-        /**计算推荐信任**/
+        /**2、计算推荐信任**/
 
         double recommen_trust;
         double fenzi;	//计算时所需要的分子分母
         double fenmu;
 
-        /**ŒÆËã×ª·¢œ»»õÂÊ**/
+       /**3、计算交货率**/
 
-        double fdr;   //×ª·¢œ»»õÂÊ
-        double fdr_period;  //Ìœ²â·¢ËÍÖÜÆÚ
+        double delivery_ratio; //交货率
+        double prob_recvs;	//收到的探测包数
 
-        /**ŒÆËã»î¶¯¶È**/
+        /**4、计算活动度**/
 
-        double ad;      //»î¶¯¶È
-        int cn_rt;      //ÀÛ»ý±»ÐÅÈÎœÚµã
-        int cn_ar;      //ÀÛŒÆœÓŽ¥œÚµã
-        double ac;      //ÈÎÒâŽóÓÚ0³£Á¿£¬¿ØÖÆÒ»žöº¯ÊýµÄÇ÷ÓÚ1µÄËÙ¶È
-    /**********ÒÔÉÏÊÇÐÞžÄÄÚÈÝ**************/
+        double activity_degree; //活动度
+        double trusted_nbs;	//被信任的邻居数
+        double interact_nbs; //接触的邻居数
+        static double a_constant; //一个常量，控制计算活动度的函数趋于1的速度
+
+
+    /**********以下为修改内容**************/
 
 };
 
@@ -99,7 +99,7 @@ class AOMDV_Path {
         friend class AOMDV;
         friend class aomdv_rt_entry;
  public:
-        AOMDV_Path(nsaddr_t nh, u_int16_t h, double expire_time, nsaddr_t lh=0) {
+        AOMDV_Path(nsaddr_t nh, u_int16_t h, double expire_time, nsaddr_t lh,double fpt,double rpt) {
            nexthop = nh;
            hopcount = h;
            expire = expire_time;
@@ -108,6 +108,8 @@ class AOMDV_Path {
            // CHANGE
            error = false;
            // CHANGE
+           FPT = fpt;
+           RPT = rpt;
         }
 	void printPath() {
 	  printf("                        %6d  %6d  %6d\n", nexthop, hopcount, lasthop);
@@ -128,7 +130,9 @@ class AOMDV_Path {
         nsaddr_t        lasthop;    // lasthop address
         // CHANGE
         bool            error;
-        // CHANGE
+        // new filed
+        double			FPT;    // forward path trust
+        double			RPT; 	// reverse path trust
 };
 
 LIST_HEAD(aomdv_paths, AOMDV_Path);
@@ -166,7 +170,7 @@ class aomdv_rt_entry {
         AOMDV_Neighbor*  nb_lookup(nsaddr_t id);
 
  // AOMDV code
-        AOMDV_Path*   path_insert(nsaddr_t nexthop, u_int16_t hopcount, double expire_time, nsaddr_t lasthop=0);
+        AOMDV_Path*   path_insert(nsaddr_t nexthop, u_int16_t hopcount, double expire_time, nsaddr_t lasthop,double fpt,double rpt);
 
         AOMDV_Path*   path_lookup(nsaddr_t id);  // lookup path by nexthop
 
