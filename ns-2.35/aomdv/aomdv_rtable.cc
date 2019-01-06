@@ -80,6 +80,7 @@ The AODV code developed by the CMU/MONARCH group was optimized and tuned by Sami
 
 
 #include <aomdv/aomdv_rtable.h>
+#include <aomdv/aomdv.h>
 #include <cmath>
 //#include <cmu/aodv/aodv.h>
 
@@ -179,8 +180,8 @@ AOMDV_Neighbor *nb = rt_nblist.lh_first;
 
 // AOMDV code
 AOMDV_Path*
-aomdv_rt_entry::path_insert(nsaddr_t nexthop, u_int16_t hopcount, double expire_time, nsaddr_t lasthop) {
-AOMDV_Path *path = new AOMDV_Path(nexthop, hopcount, expire_time, lasthop);
+aomdv_rt_entry::path_insert(nsaddr_t nexthop, u_int16_t hopcount, double expire_time, nsaddr_t lasthop,double fpt,double rpt) {
+AOMDV_Path *path = new AOMDV_Path(nexthop, hopcount, expire_time, lasthop,fpt,rpt);
         
    assert(path);
 #ifdef DEBUG
@@ -533,31 +534,43 @@ bool aomdv_rtable::rt_has_active_route() {
   }
   return false;
 }
-/***********\D2\D4\CF\C2\CA\C7\D0޸\C4\C4\DA\C8\DD***********/
+/***********here are the changes***********/
 AOMDV_Neighbor::AOMDV_Neighbor(u_int32_t a)
 {
 	nb_addr = a;
-	TV=0.8;
-
-	control_forward_corrects=0;
-	control_forward_alls=0;
-	data_forward_corrects=0;
-	data_forward_alls=0;
-
-	fenzi=0;
-	fenmu=0;
-
-
+	TV= 1;
+	TV_init();
+	black_list=0;
 }
 
-double AOMDV_Neighbor::TrustThreshold = 0.6;	//设置阈值
+double AOMDV_Neighbor::TrustThreshold = 0.70;	//设置阈值
+double AOMDV_Neighbor::a_constant = 0.3;
 
+void AOMDV_Neighbor::TV_init()
+{
+    control_forward_corrects = 8;   //累积正确转发控制包数
+    control_forward_alls = 10;   //累积总转发控制包数
+
+    data_forward_corrects = 8;   //累积正确转发控制包数
+    data_forward_alls = 10;   //累积总转发控制包数
+
+    fenzi = 8;	//计算时所需要的分子分母
+    fenmu = 10;
+
+    prob_recvs = 0;
+
+    trusted_nbs = 2;
+    interact_nbs = 2;
+
+}
 void AOMDV_Neighbor::set_TV()
 {
 	set_direct_trust();
     set_recommen_trust();
+    set_delivery_ratio();
+    set_activity_degree();
 
-    TV=0.3*direct_trust+0.3*recommen_trust+0.4*TV;
+    TV=0.3*direct_trust+0.2*recommen_trust+0.2*TV+0.2*delivery_ratio+0.1*activity_degree;
 }
 double AOMDV_Neighbor::get_TV()
 {
@@ -565,24 +578,25 @@ double AOMDV_Neighbor::get_TV()
 }
 void AOMDV_Neighbor::set_direct_trust()
 {
-    if(control_forward_alls!=0)
-    	control_forward_rate = 1.0*control_forward_corrects/control_forward_alls;
-    else
-    	control_forward_rate=0.8;
 
-    if(data_forward_alls!=0)
-        data_forward_rate = 1.0*data_forward_corrects/data_forward_alls;
-    else
-    	data_forward_rate=0.8;
+    control_forward_rate = 1.0*control_forward_corrects/control_forward_alls;
 
-    direct_trust = 0.5*control_forward_rate+0.5*data_forward_rate;
+    data_forward_rate = 1.0*data_forward_corrects/data_forward_alls;
+
+    direct_trust = 0.2*control_forward_rate+0.8*data_forward_rate;
 }
 void AOMDV_Neighbor::set_recommen_trust()
 {
-	if(fabs(fenmu-0)<=0.0001) recommen_trust=0.8;
-	else
-		{
-		recommen_trust=fenzi/fenmu;
-		}
+
+	recommen_trust=fenzi/fenmu;
+
 }
-/***********\D2\D4\C9\CF\CA\C7\D0޸\C4\C4\DA\C8\DD***********/
+void AOMDV_Neighbor::set_delivery_ratio()
+{
+	delivery_ratio = prob_recvs/( TRUST_TIME/PROB_T );
+}
+void AOMDV_Neighbor::set_activity_degree()
+{
+	activity_degree = 0.5*(1-(1/trusted_nbs + a_constant))+0.5*(1-(1/interact_nbs + a_constant));
+}
+/**************end***************/
