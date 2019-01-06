@@ -1018,6 +1018,8 @@ CMUTrace::format_aomdv(Packet *p, int offset)
 		case AOMDVTYPE_HELLO:
 		case AOMDVTYPE_RERR:
 		case AOMDVTYPE_RCOM:
+		case AOMDVTYPE_PROB:
+		case AOMDVTYPE_PTA:
 			if (pt_->tagged()) {
 				sprintf(pt_->buffer() + offset,
 						  "-aomdv:t %x -aomdv:h %d -aomdv:d %d -admov:ds %d "
