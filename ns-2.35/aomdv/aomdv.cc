@@ -245,6 +245,7 @@ AOMDVLocalRepairTimer::handle(Event* p)  {  // SRD: 5/4/99
 }
 
 /************************************/
+//定时器，定时刷新信任值、发送探测包
 void AOMDVProbeTimer::handle(Event*)
 {
 	//if((double)CURRENT_TIME >PROB_T)
@@ -509,7 +510,7 @@ AOMDV::local_rt_repair(aomdv_rt_entry *rt, Packet *p) {
 }
 
 void
-AOMDV::rt_down(aomdv_rt_entry *rt) {
+AOMDV::rt_down(aomdv_rt_entry *rt) {//标记该路由已失效
 	/*
 	 *  Make sure that you don't "down" a route more than once.
 	 */
@@ -538,7 +539,7 @@ AOMDV::rt_down(aomdv_rt_entry *rt) {
  */
 
 void
-AOMDV::rt_resolve(Packet *p) {
+AOMDV::rt_resolve(Packet *p) {//一般用来解析数据包
 
 	struct hdr_cmn *ch = HDR_CMN(p);
 	struct hdr_ip *ih = HDR_IP(p);
@@ -677,7 +678,7 @@ AOMDV::recv(Packet *p, Handler*) {
 		return;
 	}
 	
-	//cout<<index<<":我收到一个数据包\n";
+	//cout<<index<<":我收到一个非控制包\n";
 	/*
 	 *  Must be a packet I'm originating...
 	 */
@@ -797,7 +798,7 @@ AOMDV::recvRequest(Packet *p) {
 		return;
 	} 
 
-	//judge trust
+	//信任判断
 	AOMDV_Neighbor *nbt;
 	nbt=nb_lookup(ih->saddr());
 	if(!nbt)
@@ -806,7 +807,7 @@ AOMDV::recvRequest(Packet *p) {
 		nbt=nb_lookup(ih->saddr());
 	}
 	rq->RPT = min(rq->RPT,nbt->get_TV());
-	if(rq->RPT < rq->RT)
+	if(rq->RPT < rq->RT || nbt->black_list == 1)
 	{
 		Packet::free(p);
 		return;
@@ -1093,7 +1094,7 @@ AOMDV::recvReply(Packet *p) {
 	
    /* If I receive a RREP with myself as source - drop packet (should not occur).
 Comment: rp_dst is the source of the RREP, or rather the destination of the RREQ. */
-	//judge trust
+	//信任判断
 	AOMDV_Neighbor *nbt;
 	nbt=nb_lookup(ch->prev_hop_);
 	if(!nbt)
@@ -1416,16 +1417,17 @@ AOMDV::forward(aomdv_rt_entry *rt, Packet *p, double delay) {
 		ch->next_hop() = path->nexthop;
 
 		/**********以下为修改内容***************/
+		//更新前驱
 		AOMDV_Precursor *pc=rt->pc_lookup(ch->prev_hop_);
 		if(!pc)
 		{
 			rt->pc_insert(ch->prev_hop_);
 			pc=rt->pc_lookup(ch->prev_hop_);
 		}
-
-		ch->pprev_hop_=ch->prev_hop_;		//添加代码用于更新包里的上上跳和上跳
+		//添加代码用于更新包里的上上跳和上跳
+		ch->pprev_hop_=ch->prev_hop_;
 		ch->prev_hop_=this->index;
-		//refresh path trust and judge
+		//更新路径信任FPT和对nexthop的信任判断
 		AOMDV_Neighbor* nb =nb_lookup(ch->next_hop_);
 
 		if(!nb){		//如果下一跳不是邻居，则将它添加到邻居表中
@@ -1439,10 +1441,11 @@ AOMDV::forward(aomdv_rt_entry *rt, Packet *p, double delay) {
 
 			if(path->FPT < AOMDV_Neighbor::TrustThreshold)
 			{
-
+				//我不再信任nexthop
 				cout<<index<<":not trust "<<ch->next_hop_<<endl;
 
 				pc = rt->rt_pclist.lh_first;
+				//给前驱发送pta包，汇报这条路径已经不能信任
 				for(;pc;pc = pc->pc_link.le_next)
 				{		//cout<<index<<":"<<ch->next_hop_<<" to "<<pc->pc_addr<<endl;
 					Packet *rerr = Packet::alloc();
@@ -1469,7 +1472,7 @@ AOMDV::forward(aomdv_rt_entry *rt, Packet *p, double delay) {
 
 		}
 
-		//forward sends
+		//统计应该转发数
 		if(ch->ptype() == PT_CBR){
 
 
@@ -2128,12 +2131,14 @@ AOMDV::set_trust()
 	Packet *p = Packet::alloc();
 	struct hdr_aomdv_recommen *rc = HDR_AOMDV_RCOM(p);
 /*
+ * debug
+ * 
 	cout<<endl;
-	cout<<index<<":���α� time:"<<CURRENT_TIME<<endl;
+	cout<<index<<": time:"<<CURRENT_TIME<<endl;
 	cout<<"**************************"<<endl;
-*/
+
 	aomdv_rt_entry *rt=rtable.head();
-/*	for(;rt;rt=rt->rt_link.le_next)
+	for(;rt;rt=rt->rt_link.le_next)
 	{
 		AOMDV_Path *path = rt->rt_path_list.lh_first;
 		cout<<"rt.src :"<<rt->rt_dst<<endl;
@@ -2145,7 +2150,7 @@ AOMDV::set_trust()
 		}
 		cout<<endl;
 	}
-	*/
+*/
 	int num=0;
 
 	for(nb = nbhead.lh_first;nb;nb = nb->nb_link.le_next) //�����ھӱ� 
@@ -2153,6 +2158,8 @@ AOMDV::set_trust()
 		nb->set_TV();
 		
 /*
+ * debug
+ * 
 		cout<<nb->nb_addr<<"号邻居："<<endl;
 		cout<<"TV                  ��"<<nb->get_TV()<<endl;
 		cout<<"data_forward_rate   :"<<nb->data_forward_rate<<endl;
