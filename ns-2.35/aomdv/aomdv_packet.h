@@ -1,84 +1,3 @@
-/*
- * Copyright (c) 2008, Marcello Caleffi, <marcello.caleffi@unina.it>,
- * http://wpage.unina.it/marcello.caleffi
- *
- * The AOMDV code has been developed at DIET, Department of Electronic
- * and Telecommunication Engineering, University of Naples "Federico II"
- *
- *
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 59 Temple Place, Suite 330, Boston, MA 02111-1307, USA.
- 
- *
- * The copyright of this module includes the following
- * linking-with-specific-other-licenses addition:
- *
- * In addition, as a special exception, the copyright holders of
- * this module give you permission to combine (via static or
-															  * dynamic linking) this module with free software programs or
- * libraries that are released under the GNU LGPL and with code
- * included in the standard release of ns-2 under the Apache 2.0
- * license or under otherwise-compatible licenses with advertising
- * requirements (or modified versions of such code, with unchanged
-					  * license).  You may copy and distribute such a system following the
- * terms of the GNU GPL for this module and the licenses of the
- * other code concerned, provided that you include the source code of
- * that other code when and as the GNU GPL requires distribution of
- * source code.
- *
- * Note that people who make modified versions of this module
- * are not obligated to grant this special exception for their
- * modified versions; it is their choice whether to do so.  The GNU
- * General Public License gives permission to release a modified
- * version without this exception; this exception also makes it
- * possible to release a modified version which carries forward this
- * exception.
- *
- */
-
-
-
-/*
-Copyright (c) 1997, 1998 Carnegie Mellon University.  All Rights
-Reserved. 
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice,
-this list of conditions and the following disclaimer.
-2. Redistributions in binary form must reproduce the above copyright notice,
-this list of conditions and the following disclaimer in the documentation
-and/or other materials provided with the distribution.
-3. The name of the author may not be used to endorse or promote products
-derived from this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
-OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-The AODV code developed by the CMU/MONARCH group was optimized and tuned by Samir Das and Mahesh Marina, University of Cincinnati. The work was partially done in Sun Microsystems.
-*/
-
-
 
 #ifndef __aomdv_packet_h__
 #define __aomdv_packet_h__
@@ -98,6 +17,8 @@ The AODV code developed by the CMU/MONARCH group was optimized and tuned by Sami
 #define AOMDVTYPE_RREP_ACK  	0x10
 //增加推荐信任包类型宏定义
 #define AOMDVTYPE_RCOM     0x03
+#define AOMDVTYPE_PROB    0x05
+#define AOMDVTYPE_PTA    0x09
 
 /*
  * AOMDV Routing Protocol Header Macros
@@ -109,7 +30,8 @@ The AODV code developed by the CMU/MONARCH group was optimized and tuned by Sami
 #define HDR_AOMDV_RREP_ACK(p)	((struct hdr_aomdv_rrep_ack*)hdr_aomdv::access(p))
 //增加推荐信任包头宏定义
 #define HDR_AOMDV_RCOM(p)	((struct hdr_aomdv_recommen*)hdr_aomdv::access(p))
-
+#define HDR_AOMDV_PROB(p)  ((struct hdr_aomdv_probe*)hdr_aomdv::access(p))
+#define HDR_AOMDV_PTA(p)  ((struct hdr_aomdv_pta*)hdr_aomdv::access(p))
 /*
  * General AOMDV Header - shared by all formats
  */
@@ -142,6 +64,9 @@ struct hdr_aomdv_request {
 					// used to compute route discovery latency
 // AOMDV code
         nsaddr_t        rq_first_hop;  // First Hop taken by the RREQ
+        double			RT;		// required trust
+        double			FPT;    // forward path trust
+        double			RPT; 	// reverse path trust
 
   // This define turns on gratuitous replies- see aodv.cc for implementation contributed by
   // Anant Utgikar, 09/16/02.
@@ -163,6 +88,7 @@ struct hdr_aomdv_request {
   	sz = 7*sizeof(u_int32_t);
 // AOMDV code
    sz += sizeof(nsaddr_t);    // rq_first_hop 
+   sz += 3*sizeof(double);
   	assert (sz >= 0);
 	return sz;
   }
@@ -182,24 +108,19 @@ struct hdr_aomdv_reply {
 // AOMDV code
         u_int32_t       rp_bcast_id;           // Broadcast ID of the corresponding RREQ
         nsaddr_t        rp_first_hop;
+        double			RT;		// required trust
+        double			FPT;    // forward path trust
+        double			RPT; 	// reverse path trust
 						
   inline int size() { 
   int sz = 0;
-  /*
-  	sz = sizeof(u_int8_t)		// rp_type
-	     + 2*sizeof(u_int8_t) 	// rp_flags + reserved
-	     + sizeof(u_int8_t)		// rp_hop_count
-	     + sizeof(double)		// rp_timestamp
-	     + sizeof(nsaddr_t)		// rp_dst
-	     + sizeof(u_int32_t)	// rp_dst_seqno
-	     + sizeof(nsaddr_t)		// rp_src
-	     + sizeof(u_int32_t);	// rp_lifetime
-  */
+
   	sz = 6*sizeof(u_int32_t);
 // AOMDV code
    if (rp_type == AOMDVTYPE_RREP) {
       sz += sizeof(u_int32_t);   // rp_bcast_id
       sz += sizeof(nsaddr_t);    // rp_first_hop
+      sz += 3*sizeof(double);
    }
   	assert (sz >= 0);
 	return sz;
@@ -208,48 +129,61 @@ struct hdr_aomdv_reply {
 };
 /**************以下为修改内容**************/
 const int MAX_NB = 50;
+//推荐信任包
 struct hdr_aomdv_recommen {
         u_int8_t        rc_type;        // Packet Type
-        u_int8_t        reserved[2];
-        u_int8_t        rc_hop_count;           // Hop Count
-        nsaddr_t        rc_dst;                 // Destination IP Address
-        u_int32_t       rc_dst_seqno;           // Destination Sequence Number
-        nsaddr_t        rc_src;                 // Source IP Address
-        double	         rc_lifetime;            // Lifetime
 
-        double          rc_timestamp;           // when corresponding REQ sent;
-						// used to compute route discovery latency
-// AOMDV code
-        u_int32_t       rc_bcast_id;           // Broadcast ID of the corresponding RREQ
-        nsaddr_t        rc_first_hop;
 
-        nsaddr_t		nb_No[MAX_NB];		 //�ھӵ�ַ 
-        double          nb_dt[MAX_NB];		 //�����߶Ը��ھӵ�ֱ������ֵ 
-        int 			nb_num;				//�ھӸ��� 
+        nsaddr_t		nb_No[MAX_NB];		 //�ھӵ�ַ 
+        double          nb_dt[MAX_NB];		 //�����߶Ը��ھӵ�ֱ������ֵ 
+        int 			nb_num;				//�ھӸ��� 
 
   inline int size() {
   int sz = 0;
-  /*
-  	sz = sizeof(u_int8_t)		// rp_type
-	     + 2*sizeof(u_int8_t) 	// rp_flags + reserved
-	     + sizeof(u_int8_t)		// rp_hop_count
-	     + sizeof(double)		// rp_timestamp
-	     + sizeof(nsaddr_t)		// rp_dst
-	     + sizeof(u_int32_t)	// rp_dst_seqno
-	     + sizeof(nsaddr_t)		// rp_src
-	     + sizeof(u_int32_t);	// rp_lifetime
-  */
-  	sz = 6*sizeof(u_int32_t);
+
+  	sz = sizeof(u_int8_t);
 
 // AOMDV code
    if (rc_type == AOMDVTYPE_RCOM) {
-      sz += sizeof(u_int32_t);   // rp_bcast_id
-      sz += sizeof(nsaddr_t);    // rp_first_hop
-      sz += sizeof(nsaddr_t)*MAX_NB+sizeof(double)*MAX_NB+sizeof(int);
+
+      sz += sizeof(nsaddr_t)*nb_num+sizeof(double)*nb_num+sizeof(int);
    }
   	assert (sz >= 0);
 	return sz;
   }
+
+};
+//探测包
+struct hdr_aomdv_probe {
+        u_int8_t        rp_type;        // Packet Type
+
+  inline int size() {
+  int sz = 0;
+
+  	sz = sizeof(u_int8_t);
+// AOMDV code
+   if (rp_type == AOMDVTYPE_PROB) {
+
+   }
+  	assert (sz >= 0);
+	return sz;
+  }
+
+};
+struct hdr_aomdv_pta {
+    u_int8_t        re_type;                // Type
+
+    nsaddr_t        unreachable_dst;
+    nsaddr_t		unreachable_lasthop;
+    u_int32_t       unreachable_dst_seqno;
+
+inline int size() {
+int sz = 0;
+
+	sz = sizeof(u_int8_t)+sizeof(u_int32_t)+2*sizeof(nsaddr_t);
+assert(sz);
+    return sz;
+}
 
 };
 /***************以上为修改内容*************/
@@ -290,6 +224,8 @@ union hdr_all_aomdv {
   hdr_aomdv_error    rerr;
   hdr_aomdv_rrep_ack rrep_ack;
   hdr_aomdv_recommen rcom;
+  hdr_aomdv_probe prob;
+  hdr_aomdv_pta pta;
 };
 
 #endif /* __aomdv_packet_h__ */
