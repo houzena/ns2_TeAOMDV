@@ -104,7 +104,7 @@ int i;
  rt_highest_seqno_heard = 0;
  rt_num_paths_ = 0;
  rt_error = false;
- 
+
  LIST_INIT(&rt_pclist);
  rt_expire = 0.0;
  rt_flags = RTF_DOWN;
@@ -142,7 +142,7 @@ AOMDV_Path *path;
    LIST_REMOVE(path, path_link);
    delete path;
  }
- 
+
 AOMDV_Precursor *pc;
 
  while((pc = rt_pclist.lh_first)) {
@@ -157,7 +157,7 @@ void
 aomdv_rt_entry::nb_insert(nsaddr_t id)
 {
 AOMDV_Neighbor *nb = new AOMDV_Neighbor(id);
-        
+
  assert(nb);
  nb->nb_expire = 0;
  LIST_INSERT_HEAD(&rt_nblist, nb, nb_link);
@@ -182,7 +182,7 @@ AOMDV_Neighbor *nb = rt_nblist.lh_first;
 AOMDV_Path*
 aomdv_rt_entry::path_insert(nsaddr_t nexthop, u_int16_t hopcount, double expire_time, nsaddr_t lasthop,double fpt,double rpt) {
 AOMDV_Path *path = new AOMDV_Path(nexthop, hopcount, expire_time, lasthop,fpt,rpt);
-        
+
    assert(path);
 #ifdef DEBUG
    fprintf(stderr, "%s: (%d\t%d)\n", __FUNCTION__, path->nexthop, path->hopcount);
@@ -193,7 +193,7 @@ AOMDV_Path *path = new AOMDV_Path(nexthop, hopcount, expire_time, lasthop,fpt,rp
     */
 AOMDV_Path *p = rt_path_list.lh_first;
    if (p) {
-      for(; p->path_link.le_next; p = p->path_link.le_next) 
+      for(; p->path_link.le_next; p = p->path_link.le_next)
 	/* Do nothing */;
       LIST_INSERT_AFTER(p, path, path_link);
    }
@@ -284,7 +284,7 @@ AOMDV_Path *path;
    delete path;
  }
  rt_num_paths_ = 0;
-}  
+}
 
 void
 aomdv_rt_entry::path_delete_longest(void) {
@@ -315,11 +315,11 @@ AOMDV_Path *path;
     assert (rt_num_paths_ > 0);
     return false;
  }
- else {  
+ else {
     assert (rt_num_paths_ == 0);
     return true;
  }
-}  
+}
 
 AOMDV_Path*
 aomdv_rt_entry::path_findMinHop(void)
@@ -412,7 +412,7 @@ aomdv_rt_entry::pc_insert(nsaddr_t id)
 {
 	if (pc_lookup(id) == NULL) {
 	AOMDV_Precursor *pc = new AOMDV_Precursor(id);
-        
+
  		assert(pc);
  		LIST_INSERT_HEAD(&rt_pclist, pc, pc_link);
 	}
@@ -454,7 +454,7 @@ AOMDV_Precursor *pc;
    LIST_REMOVE(pc, pc_link);
    delete pc;
  }
-}	
+}
 
 bool
 aomdv_rt_entry::pc_empty(void) {
@@ -462,7 +462,7 @@ AOMDV_Precursor *pc;
 
  if ((pc = rt_pclist.lh_first)) return false;
  else return true;
-}	
+}
 
 /*
   The Routing Table
@@ -512,7 +512,7 @@ void aomdv_rtable::rt_dumptable() {
   while(rt != 0) {
     printf("%6s  %6s  ", "Dest", "Seq#");
     printf("%6s  %6s  %6s  %6s\n", "Advhop", "Nxthop", "Hopcnt", "Lsthop");
-    printf("%6d  %6d  ", rt->rt_dst, rt->rt_seqno);  
+    printf("%6d  %6d  ", rt->rt_dst, rt->rt_seqno);
     printf("%6d\n", rt->rt_advertised_hops);
     /* Print path list for this route entry. */
     AOMDV_Path *paths = rt->rt_path_list.lh_first;
@@ -524,7 +524,7 @@ void aomdv_rtable::rt_dumptable() {
 
 // AOMDV code
 bool aomdv_rtable::rt_has_active_route() {
-  /* Go through list of route entries to see if there exists 
+  /* Go through list of route entries to see if there exists
      any valid route entry */
   aomdv_rt_entry *rt = rthead.lh_first;
   while(rt != 0) {
@@ -539,25 +539,32 @@ AOMDV_Neighbor::AOMDV_Neighbor(u_int32_t a)
 {
 	nb_addr = a;
 	TV= 1;
+	data_forward_corrects = 0;
+	data_forward_alls = 0;
 	TV_init();
+	cbr_num = 0;
+	ptaomdv_num = 0;
 	black_list=0;
 }
 
 double AOMDV_Neighbor::TrustThreshold = 0.70;	//设置阈值
-double AOMDV_Neighbor::a_constant = 0.3;
+double AOMDV_Neighbor::a_constant = 0.1;
 
 void AOMDV_Neighbor::TV_init()
 {
-    control_forward_corrects = 8;   //累积正确转发控制包数
-    control_forward_alls = 10;   //累积总转发控制包数
 
-    data_forward_corrects = 8;   //累积正确转发控制包数
-    data_forward_alls = 10;   //累积总转发控制包数
-
-    fenzi = 8;	//计算时所需要的分子分母
-    fenmu = 10;
+    control_forward_corrects = 0;   //累积正确转发控制包数
+    control_forward_alls = 0;   //累积总转发控制包数
+    if(data_forward_alls >= 5)
+    {
+    	data_forward_corrects = 0;   //累积正确转发控制包数
+    	data_forward_alls = 0;   //累积总转发控制包数
+   }
+    fenzi = 0;	//计算时所需要的分子分母
+    fenmu = 0;
 
     prob_recvs = 0;
+    prob_stime = CURRENT_TIME;
 
     trusted_nbs = 2;
     interact_nbs = 2;
@@ -570,7 +577,7 @@ void AOMDV_Neighbor::set_TV()
     set_delivery_ratio();
     set_activity_degree();
 
-    TV=0.3*direct_trust+0.2*recommen_trust+0.2*TV+0.2*delivery_ratio+0.1*activity_degree;
+    TV=0.35*direct_trust+0.1*recommen_trust+0.2*TV+0.225*delivery_ratio+0.125*activity_degree;
 }
 double AOMDV_Neighbor::get_TV()
 {
@@ -578,22 +585,70 @@ double AOMDV_Neighbor::get_TV()
 }
 void AOMDV_Neighbor::set_direct_trust()
 {
-
+	int tot=0;
+	for(int i=0;i<ptaomdv_num;i++)
+	{
+		if(ptaomdv_f[i].ok == true)
+		    	{
+		    		control_forward_corrects++;
+		    		control_forward_alls++;
+		    	}
+		    	else if(ptaomdv_f[i].time+1.5<CURRENT_TIME)
+		    	{
+		    		control_forward_alls++;
+		    	}
+		    	else
+		    	{
+		    		ptaomdv_f[tot].ok = false;
+		    		ptaomdv_f[tot].uid = ptaomdv_f[i].uid;
+		    		ptaomdv_f[tot].time = ptaomdv_f[i].time;
+		    		tot++;
+		    	}
+	}
+	ptaomdv_num = tot;
+	if(control_forward_alls >= 2)
     control_forward_rate = 1.0*control_forward_corrects/control_forward_alls;
+	else control_forward_rate = 0.9;
 
+    tot=0;
+    for(int i=0; i<cbr_num ;i++)
+    {
+    	if(cbr_f[i].ok == true)
+    	{
+    		data_forward_corrects++;
+    		data_forward_alls++;
+    	}
+    	else if(cbr_f[i].time+1.5<CURRENT_TIME)
+    	{
+    		data_forward_alls++;
+    	}
+    	else
+    	{
+    		cbr_f[tot].ok = false;
+    		cbr_f[tot].uid = cbr_f[i].uid;
+    		cbr_f[tot].time = cbr_f[i].time;
+    		tot++;
+    	}
+    }
+    cbr_num = tot;
+    if(data_forward_alls >= 5)
     data_forward_rate = 1.0*data_forward_corrects/data_forward_alls;
+    else data_forward_rate = 0.9;
 
     direct_trust = 0.2*control_forward_rate+0.8*data_forward_rate;
 }
 void AOMDV_Neighbor::set_recommen_trust()
 {
-
+	if(fabs(fenmu)>=0.1)
 	recommen_trust=fenzi/fenmu;
+	else  recommen_trust = 0.8;
 
 }
 void AOMDV_Neighbor::set_delivery_ratio()
 {
-	delivery_ratio = prob_recvs/( TRUST_TIME/PROB_T );
+	if(CURRENT_TIME - prob_stime > 1.5)
+		delivery_ratio = prob_recvs/( (CURRENT_TIME - prob_stime)/PROB_T );
+	else delivery_ratio = 0.8;
 }
 void AOMDV_Neighbor::set_activity_degree()
 {
