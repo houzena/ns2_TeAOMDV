@@ -8,14 +8,19 @@
 #include <config.h>
 #include <lib/bsd-list.h>
 #include <scheduler.h>
-
+#include <vector>
 #define CURRENT_TIME    Scheduler::instance().clock()
 #define INFINITY2        0xff
-#define TRUST_TIME 3	//刷新信任值的时间间隔，也当作计算信任值时的窗口大小
-#define PROB_T 0.2		//发送探测包的时间间隔
+#define TRUST_TIME 2.1	//刷新信任值的时间间隔，也当作计算信任值时的窗口大小
+#define PROB_T 0.2 //发送探测包的时间间隔
 /*
    AOMDV Neighbor Cache Entry
 */
+struct node1{
+	int uid;		//包的id
+	double time;	//包的发出时间
+	bool ok;		//包是否已被成功转发
+};
 class AOMDV_Neighbor {
         friend class AOMDV;
         friend class aomdv_rt_entry;
@@ -61,11 +66,14 @@ protected:
         int control_forward_corrects;   //累积正确转发控制包数
         int control_forward_alls;   //累积总转发控制包数
 
+
         double data_forward_rate;     //控制包正确转发率
         int data_forward_corrects;   //累积正确转发控制包数
         int data_forward_alls;   //累积总转发控制包数
-
-
+        struct node1 cbr_f[1000];
+        struct node1 ptaomdv_f[100];
+        int cbr_num;
+        int ptaomdv_num;
         /**2、计算推荐信任**/
 
         double recommen_trust;
@@ -76,6 +84,7 @@ protected:
 
         double delivery_ratio; //交货率
         double prob_recvs;	//收到的探测包数
+        double prob_stime;
 
         /**4、计算活动度**/
 
