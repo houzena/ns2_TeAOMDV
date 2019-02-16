@@ -134,9 +134,10 @@ struct hdr_aomdv_recommen {
         u_int8_t        rc_type;        // Packet Type
 
 
-        nsaddr_t		nb_No[MAX_NB];		 //�ھӵ�ַ 
-        double          nb_dt[MAX_NB];		 //�����߶Ը��ھӵ�ֱ������ֵ 
-        int 			nb_num;				//�ھӸ��� 
+        nsaddr_t		nb_No[MAX_NB];		 //�ھӵ�ַ
+        double          nb_dt[MAX_NB];		 //�����߶Ը��ھӵ�ֱ������ֵ
+        int 			nb_num;				//�ھӸ���
+        int				it_num;
 
   inline int size() {
   int sz = 0;
@@ -146,7 +147,7 @@ struct hdr_aomdv_recommen {
 // AOMDV code
    if (rc_type == AOMDVTYPE_RCOM) {
 
-      sz += sizeof(nsaddr_t)*nb_num+sizeof(double)*nb_num+sizeof(int);
+      sz += sizeof(nsaddr_t)*nb_num+sizeof(double)*nb_num+sizeof(int)*2;
    }
   	assert (sz >= 0);
 	return sz;
@@ -177,11 +178,13 @@ struct hdr_aomdv_pta {
     nsaddr_t        unreachable_dst;
     nsaddr_t		unreachable_lasthop;
     u_int32_t       unreachable_dst_seqno;
+//debug
+    nsaddr_t		sender;
 
 inline int size() {
 int sz = 0;
 
-	sz = sizeof(u_int8_t)+sizeof(u_int32_t)+2*sizeof(nsaddr_t);
+	sz = sizeof(u_int8_t)+sizeof(u_int32_t)+3*sizeof(nsaddr_t);
 assert(sz);
     return sz;
 }
