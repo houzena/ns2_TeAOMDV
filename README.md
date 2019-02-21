@@ -1,6 +1,6 @@
 # ns2_TeAOMDV
 
-一个基于ns2网络模拟，对AOMDV协议进行修改，形成的带信任评估、按需、多路径协议的小项目
+一个基于ns2网络模拟，对AOMDV协议进行修改，形成的带信任评估、按需、多路径协议的小项目，基于elsevier期刊https://www.sciencedirect.com/science/article/pii/S1084804515002982
 
 1，模拟机制<br>
 每个节点都仿佛是一个独立的线程，节点与其它节点的接触，无非发包和收包。<br>
