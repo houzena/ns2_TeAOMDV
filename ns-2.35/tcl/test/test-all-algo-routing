@@ -1,6 +1,0 @@
-#! /bin/sh
-
-file="test-suite-algo-routing.tcl"
-directory="test-output-algo-routing"
-version="v2"
-./test-all-template1 $file $directory $version $@

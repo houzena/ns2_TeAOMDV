@@ -1,0 +1,14 @@
+【ubuntu14.3下安装ns2.35安装详解 - CSDN博客】
+https://blog.csdn.net/lwb102063/article/details/50085481
+
+【在Eclipse中调试和运行NS2 - CSDN博客】
+https://blog.csdn.net/bill_chuang/article/details/18315999
+
+【aodv.cc - CSDN博客】
+ https://blog.csdn.net/zwf_123/article/details/78566948
+
+【如何在AODV(NS-2)中实现混杂模式并且实现邻居监测功能［转载］ - CSDN博客】
+https://blog.csdn.net/chutian_8986/article/details/9146037
+
+【推荐：较详细的教程，添加新协议，测数据】
+https://blog.csdn.net/hainengbunengwan/article/details/50906741?utm_source=blogxgwz3 

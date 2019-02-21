@@ -1,7 +1,0 @@
-#! /bin/sh
-
-file="test-suite-mcast.tcl"
-directory="test-output-mcast"
-version="v2"
-./test-all-template1 $file $directory $version $@
-

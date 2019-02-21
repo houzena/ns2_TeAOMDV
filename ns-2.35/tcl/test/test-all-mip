@@ -1,6 +1,0 @@
-#! /bin/sh
-
-file="test-suite-mip.tcl"
-directory="test-output-mip"
-version="v2"
-./test-all-template1 $file $directory $version $@

@@ -1,6 +1,0 @@
-#! /bin/sh
-
-file="test-suite-greis.tcl"
-directory="test-output-greis"
-version="v2"
-./test-all-template1 $file $directory $version $@

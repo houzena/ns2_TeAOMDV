@@ -1,0 +1,47 @@
+2019年 02月 16日 星期六 19:11:38 CST
+----------------------------------
+0 m node:
+average: 0.847664
+latency average: 0.041333
+----------------------------------
+2 m node:
+average: 0.784450
+latency average: 0.042828
+2 m node:
+average: 0.782782
+latency average: 0.045808
+2 m node:
+average: 0.812820
+latency average: 0.043762
+----------------------------------
+4 m node:
+average: 0.693508
+latency average: 0.043483
+4 m node:
+average: 0.685725
+latency average: 0.042365
+4 m node:
+average: 0.778736
+latency average: 0.045105
+----------------------------------
+6 m node:
+average: 0.649629
+latency average: 0.042295
+6 m node:
+average: 0.665136
+latency average: 0.044566
+6 m node:
+average: 0.720699
+latency average: 0.046109
+----------------------------------
+8 m node:
+average: 0.642374
+latency average: 0.046596
+8 m node:
+average: 0.568675
+latency average: 0.053858
+8 m node:
+average: 0.443436
+latency average: 0.054453
+----------------------------------
+2019年 02月 16日 星期六 21:05:08 CST

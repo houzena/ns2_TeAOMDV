@@ -1,6 +1,0 @@
-#! /bin/sh
-
-file="test-suite-vc.tcl"
-directory="test-output-vc"
-version="v2"
-./test-all-template1 $file $directory $version $@

@@ -1,4 +1,0 @@
-
-For new modules, please use the macros in configure.in.fns if possible
-rather than duplicating lots of shell code.
-
